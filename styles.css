@@ -2,10 +2,18 @@ h1 {
     padding-left: 20px;
 }
 
+canvas {
+    position: absolute;
+    border-radius: 10px;
+    pointer-events: none;
+    z-index: 0;
+}
+
 #workspace {
     height: 75vh;
     border: 3px dashed black;
     border-radius: 10px;
+    z-index: 1;
 }
 
 #inventory-container {
