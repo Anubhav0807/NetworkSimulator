@@ -1,6 +1,7 @@
 var selected;
 var offsetX, offsetY;
 var cables = [];
+var firstNode = true;
 
 function handleDragStart(e) {
     this.style.opacity = '0.4';
@@ -32,7 +33,8 @@ function handleDrop(e) {
     newImg.draggable = false;
     newImg.style.top  = e.clientY - offsetY + 'px';
     newImg.style.left = e.clientX - offsetX + 'px';
-    newImg.addEventListener('click', handleClick);
+    newImg.addEventListener('mousedown', handleMouseDown);
+    newImg.addEventListener('mouseup', handleMouseUp);
     this.appendChild(newImg);
 
     selected = null;
@@ -48,11 +50,11 @@ function resizeCanvas() {
     canvas.width = workspace.offsetWidth;
     canvas.height = workspace.offsetHeight;
     cables.forEach((cable) => {
-        drawDiagonal(cable[0], cable[1], cable[2], cable[3]);
+        drawCable(cable);
     })
 }
 
-function drawDiagonal(x1, y1, x2, y2) {
+function drawLine(x1, y1, x2, y2) {
     ctx.beginPath();
     ctx.moveTo(x1, y1);
     ctx.lineTo(x2, y2);
@@ -61,14 +63,23 @@ function drawDiagonal(x1, y1, x2, y2) {
     ctx.stroke();
 }
 
+function drawCable(cable) {
+    ctx.beginPath();
+    ctx.moveTo(parseFloat(cable[0].style.left)+32, parseFloat(cable[0].style.top)+32);
+    ctx.lineTo(parseFloat(cable[1].style.left)+32, parseFloat(cable[1].style.top)+32);
+    ctx.strokeStyle = "black";
+    ctx.lineWidth = 2;
+    ctx.stroke();
+}
+
 function isDuplicate(newCable) {
     let duplicate = false;
     cables.forEach((cable) => {
-        if (newCable[0] == cable[0] && newCable[1] == cable[1] && newCable[2] == cable[2] && newCable[3] == cable[3]) {
+        if (newCable[0] == cable[0] && newCable[1] == cable[1]) {
             duplicate = true;
             return;
         }
-        if (newCable[0] == cable[2] && newCable[1] == cable[3] && newCable[2] == cable[0] && newCable[3] == cable[1]) {
+        if (newCable[0] == cable[1] && newCable[1] == cable[0]) {
             duplicate = true;
             return;
         }
@@ -76,57 +87,100 @@ function isDuplicate(newCable) {
     return duplicate;
 }
 
-function handleClick(e) {
-    if (selected) {
-        
-        if (selected != e.target) {
-            let cable = [
-                parseFloat(selected.style.left)+32, 
-                parseFloat(selected.style.top)+32,
-                parseFloat(e.target.style.left)+32,
-                parseFloat(e.target.style.top)+32,
-            ];
-            if (!isDuplicate(cable)) {
-                cables.push(cable);
-            }
-        }
-
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-        cables.forEach((cable) => {
-            drawDiagonal(cable[0], cable[1], cable[2], cable[3]);
-        })
-
-        workspace.removeEventListener('mouseenter', handleMouseEnter);
-        workspace.removeEventListener('mousemove', handleMouseMove);
-        workspace.removeEventListener('mouseleave', handleMouseLeave);
-        selected = null;
-
-        return;
-    }
+function handleMouseDown(e) {
+    if (selected) return;
     selected = e.target;
-    workspace.addEventListener('mouseenter', handleMouseEnter);
-    workspace.addEventListener('mousemove', handleMouseMove);
-    workspace.addEventListener('mouseleave', handleMouseLeave);
+    offsetX = e.offsetX;
+    offsetY = e.offsetY;
+    document.addEventListener('mousemove', handleMouseMoveB);
+    document.addEventListener('mouseup', handleMouseUpOutside);
+}
+
+function handleMouseUp(e) {
+    if (selected.style.cursor == 'move') {
+        selected.style.cursor = 'pointer';
+        selected = null;
+    } else {
+        if (firstNode) {
+            workspace.addEventListener('mouseenter', handleMouseEnter);
+            workspace.addEventListener('mousemove', handleMouseMoveA);
+            workspace.addEventListener('mouseleave', handleMouseLeave);
+            firstNode = false;
+        } else {
+            if (selected != e.target) {
+                let cable = [selected, e.target];
+                if (!isDuplicate(cable)) {
+                    cables.push(cable);
+                }
+            }
+    
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            cables.forEach((cable) => {
+                drawCable(cable);
+            })
+    
+            workspace.removeEventListener('mouseenter', handleMouseEnter);
+            workspace.removeEventListener('mousemove', handleMouseMoveA);
+            workspace.removeEventListener('mouseleave', handleMouseLeave);
+            selected = null;
+            firstNode = true;
+        }
+    }
+    document.removeEventListener('mousemove', handleMouseMoveB);
+    document.removeEventListener('mouseup', handleMouseUpOutside);
+}
+
+function handleMouseUpOutside(e) {
+    selected.style.cursor = 'pointer';
+    selected = null;
+    document.removeEventListener('mousemove', handleMouseMoveB);
+    document.removeEventListener('mouseup', handleMouseUpOutside);
 }
 
 function handleMouseEnter(e) {
-    workspace.addEventListener('mousemove', handleMouseMove);
+    workspace.addEventListener('mousemove', handleMouseMoveA);
 }
 
-function handleMouseMove(e) {
+function handleMouseMoveA(e) {
+    // Creating a new cable
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     cables.forEach((cable) => {
-        drawDiagonal(cable[0], cable[1], cable[2], cable[3]);
+        drawCable(cable);
     })
-    drawDiagonal(parseFloat(selected.style.left)+32, parseFloat(selected.style.top)+32, e.clientX, e.clientY);
+    drawLine(parseFloat(selected.style.left)+32, parseFloat(selected.style.top)+32, e.clientX, e.clientY);
+}
+
+function handleMouseMoveB(e) {
+    selected.style.cursor = 'move';
+    let rect = workspace.getBoundingClientRect();
+
+    // Moving an existing node
+    selected.style.left = e.clientX - offsetX + 'px';
+    if (parseFloat(selected.style.left) < 8) {
+        selected.style.left = '8px';
+    } else if (parseFloat(selected.style.left) > rect.width - 56) {
+        selected.style.left = rect.width - 56 + 'px';
+    }
+    
+    selected.style.top = e.clientY - offsetY + 'px';
+    if (parseFloat(selected.style.top) < 8) {
+        selected.style.top = '8px';
+    } else if (parseFloat(selected.style.top) > rect.height - 56) {
+        selected.style.top = rect.height - 56 + 'px';
+    }
+
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    cables.forEach((cable) => {
+        drawCable(cable);
+    })
 }
 
 function handleMouseLeave(e) {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     cables.forEach((cable) => {
-        drawDiagonal(cable[0], cable[1], cable[2], cable[3]);
+        drawCable(cable);
     })
-    workspace.removeEventListener('mousemove', handleMouseMove);
+    workspace.removeEventListener('mousemove', handleMouseMoveA);
 }
 
 let items = document.querySelectorAll('.item');
