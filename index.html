@@ -10,11 +10,15 @@
     <canvas></canvas>
     <div id="workspace">
         <h1>Network Simulator</h1>
-    </div>    
+        <div id="fallback">
+            Drag the componets into the workspace to begin
+        </div>
+    </div>
+    <div id="context-menu"></div>
     <div id="inventory-container">
         <div id="inventory">
-            <img class="item" draggable="true" src="assets/images/computer.png">
-            <img class="item" draggable="true" src="assets/images/hub.png">
+            <img class="item computer" draggable="true" src="assets/images/computer.png" alt="Computer" title="Computer">
+            <img class="item hub" draggable="true" src="assets/images/hub.png" alt="Hub" title="Hub">
             <div class="item"></div>
             <div class="item"></div>
             <div class="item"></div>
@@ -23,6 +27,7 @@
             <div class="item"></div>
         </div>
     </div>
+    <div id="overlay"></div>
     <script src="script.js"></script>
 </body>
 </html>

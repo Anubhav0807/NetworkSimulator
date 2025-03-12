@@ -1,17 +1,50 @@
 var selected;
+var selectedR;    // Selected Node with Right Click
+var selectedT = { // Selected Node with Open Terminal
+    node: null,
+    initX: NaN,
+    initY: NaN
+};
+
 var offsetX, offsetY;
+var nodes = [];
 var cables = [];
 var firstNode = true;
+var nodeCount = 0;
+
+var selection;
+var selectionStart = {x: NaN, y:NaN};
+var selectedLst = [];
+var offsetLst = [];
+
+var terminal;
+var screenClone;
+
+function increaseNodeCount() {
+    if (++nodeCount == 1) {
+        fallbackMsg.style.transitionDuration = '0s';
+        fallbackMsg.style.color = 'rgba(0, 0, 0, 0)';
+    }
+}
+
+function decreaseNodeCount() {
+    if (--nodeCount == 0) {
+        fallbackMsg.style.transitionDuration = '1s';
+        fallbackMsg.style.color = 'rgba(0, 0, 0, 0.2)';
+    }
+}
 
 function handleDragStart(e) {
     this.style.opacity = '0.4';
     selected = e.target;
     offsetX = e.offsetX;
     offsetY = e.offsetY;
+    closeContextMenu();
 }
 
 function handleDragEnter(e) {
     this.style.backgroundColor = '#F0FFFF';
+    fallbackMsg.innerText = 'Now, release the mouse to drop';
 }
 
 function handleDragOver(e) {
@@ -20,22 +53,30 @@ function handleDragOver(e) {
 }
 
 function handleDragLeave(e) {
+    if (e.target.id != 'workspace') return;
     this.style.backgroundColor = 'white';
+    fallbackMsg.innerText = 'Drag the componets into the workspace to begin';
 }
 
 function handleDrop(e) {
     e.stopPropagation(); // stops the browser from redirecting
     this.style.backgroundColor = 'white';
+    fallbackMsg.innerText = 'Drag the componets into the workspace to begin';
 
     let newImg = document.createElement('img');
     newImg.classList.add('component');
+    newImg.classList.add(findType(selected));
     newImg.src = selected.src;
     newImg.draggable = false;
     newImg.style.top  = e.clientY - offsetY + 'px';
     newImg.style.left = e.clientX - offsetX + 'px';
     newImg.addEventListener('mousedown', handleMouseDown);
     newImg.addEventListener('mouseup', handleMouseUp);
+    newImg.addEventListener('contextmenu', handleContextMenu);
+    newImg.addEventListener('dragstart', e => e.preventDefault());
     this.appendChild(newImg);
+    nodes.push(newImg);
+    increaseNodeCount();
 
     selected = null;
     return false;
@@ -58,18 +99,25 @@ function drawLine(x1, y1, x2, y2) {
     ctx.beginPath();
     ctx.moveTo(x1, y1);
     ctx.lineTo(x2, y2);
-    ctx.strokeStyle = "black";
+    ctx.strokeStyle = "rgba(0, 0, 0, 0.5)";
     ctx.lineWidth = 2;
     ctx.stroke();
 }
 
 function drawCable(cable) {
     ctx.beginPath();
-    ctx.moveTo(parseFloat(cable[0].style.left)+32, parseFloat(cable[0].style.top)+32);
-    ctx.lineTo(parseFloat(cable[1].style.left)+32, parseFloat(cable[1].style.top)+32);
+    ctx.moveTo(parseFloat(getComputedStyle(cable[0]).left)+32, parseFloat(getComputedStyle(cable[0]).top)+32);
+    ctx.lineTo(parseFloat(getComputedStyle(cable[1]).left)+32, parseFloat(getComputedStyle(cable[1]).top)+32);
     ctx.strokeStyle = "black";
     ctx.lineWidth = 2;
     ctx.stroke();
+}
+
+function refreshCanvas() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    cables.forEach((cable) => {
+        drawCable(cable);
+    })
 }
 
 function isDuplicate(newCable) {
@@ -77,53 +125,73 @@ function isDuplicate(newCable) {
     cables.forEach((cable) => {
         if (newCable[0] == cable[0] && newCable[1] == cable[1]) {
             duplicate = true;
-            return;
-        }
-        if (newCable[0] == cable[1] && newCable[1] == cable[0]) {
+        }else if (newCable[0] == cable[1] && newCable[1] == cable[0]) {
             duplicate = true;
-            return;
         }
     });
     return duplicate;
 }
 
 function handleMouseDown(e) {
+    if (e.button != 0) return;
+    e.stopPropagation();
     if (selected) return;
-    selected = e.target;
-    offsetX = e.offsetX;
-    offsetY = e.offsetY;
+    if (selectedLst.length == 0) {
+        selected = e.target;
+        offsetX = e.offsetX;
+        offsetY = e.offsetY;
+    } else {
+        selectedLst.forEach((node) => {
+            offsetLst.push({
+                x: e.clientX - parseInt(node.style.left) - 2,
+                y: e.clientY - parseInt(node.style.top) - 2  // 2px for border width
+            })
+        });
+    }
     document.addEventListener('mousemove', handleMouseMoveB);
     document.addEventListener('mouseup', handleMouseUpOutside);
+    closeContextMenu();
 }
 
 function handleMouseUp(e) {
+    if (e.button != 0) return;
+    if (selectedLst.length > 0) {
+        selectedLst.forEach((node) => {
+            node.style.cursor = 'pointer';
+        });
+    }
+    if (selected == null) return;
     if (selected.style.cursor == 'move') {
         selected.style.cursor = 'pointer';
         selected = null;
     } else {
-        if (firstNode) {
-            workspace.addEventListener('mouseenter', handleMouseEnter);
-            workspace.addEventListener('mousemove', handleMouseMoveA);
-            workspace.addEventListener('mouseleave', handleMouseLeave);
-            firstNode = false;
-        } else {
-            if (selected != e.target) {
-                let cable = [selected, e.target];
-                if (!isDuplicate(cable)) {
-                    cables.push(cable);
+        if (selectedR == null) {
+            if (firstNode) {
+                workspace.addEventListener('mouseenter', handleMouseEnter);
+                workspace.addEventListener('mousemove', handleMouseMoveA);
+                workspace.addEventListener('mouseleave', handleMouseLeave);
+                firstNode = false;
+            } else if (selection == null) {
+                if (selected != e.target) {
+                    let cable = [selected, e.target];
+                    if (!isDuplicate(cable)) {
+                        cables.push(cable);
+                    }
+                }
+                refreshCanvas();
+                
+                if (e.ctrlKey) {
+                    selected = e.target;
+                } else if (e.shiftKey) {
+                    // Do nothing :)
+                } else {
+                    workspace.removeEventListener('mouseenter', handleMouseEnter);
+                    workspace.removeEventListener('mousemove', handleMouseMoveA);
+                    workspace.removeEventListener('mouseleave', handleMouseLeave);
+                    selected = null;
+                    firstNode = true;
                 }
             }
-    
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-            cables.forEach((cable) => {
-                drawCable(cable);
-            })
-    
-            workspace.removeEventListener('mouseenter', handleMouseEnter);
-            workspace.removeEventListener('mousemove', handleMouseMoveA);
-            workspace.removeEventListener('mouseleave', handleMouseLeave);
-            selected = null;
-            firstNode = true;
         }
     }
     document.removeEventListener('mousemove', handleMouseMoveB);
@@ -131,8 +199,15 @@ function handleMouseUp(e) {
 }
 
 function handleMouseUpOutside(e) {
-    selected.style.cursor = 'pointer';
-    selected = null;
+    if (selected) {
+        selected.style.cursor = 'pointer';
+        selected = null;
+    } else {
+        selectedLst.forEach((node) => {
+            node.style.cursor = 'pointer';
+        });
+        removeSelection();
+    }
     document.removeEventListener('mousemove', handleMouseMoveB);
     document.removeEventListener('mouseup', handleMouseUpOutside);
 }
@@ -143,44 +218,324 @@ function handleMouseEnter(e) {
 
 function handleMouseMoveA(e) {
     // Creating a new cable
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    cables.forEach((cable) => {
-        drawCable(cable);
-    })
-    drawLine(parseFloat(selected.style.left)+32, parseFloat(selected.style.top)+32, e.clientX, e.clientY);
+    refreshCanvas();
+    drawLine(parseFloat(selected.style.left)+32, parseFloat(selected.style.top)+32, e.clientX-8, e.clientY-8);
 }
 
 function handleMouseMoveB(e) {
-    selected.style.cursor = 'move';
+    // Moving an existing node(s)
     let rect = workspace.getBoundingClientRect();
 
-    // Moving an existing node
-    selected.style.left = e.clientX - offsetX + 'px';
-    if (parseFloat(selected.style.left) < 8) {
-        selected.style.left = '8px';
-    } else if (parseFloat(selected.style.left) > rect.width - 56) {
-        selected.style.left = rect.width - 56 + 'px';
-    }
-    
-    selected.style.top = e.clientY - offsetY + 'px';
-    if (parseFloat(selected.style.top) < 8) {
-        selected.style.top = '8px';
-    } else if (parseFloat(selected.style.top) > rect.height - 56) {
-        selected.style.top = rect.height - 56 + 'px';
+    if (selected) {
+        selected.style.cursor = 'move';
+
+        selected.style.left = e.clientX - offsetX + 'px';
+        if (parseFloat(selected.style.left) < 8) {
+            selected.style.left = '8px';
+        } else if (parseFloat(selected.style.left) > rect.width - 60) {
+            selected.style.left = rect.width - 60 + 'px';
+        }
+        
+        selected.style.top = e.clientY - offsetY + 'px';
+        if (parseFloat(selected.style.top) < 8) {
+            selected.style.top = '8px';
+        } else if (parseFloat(selected.style.top) > rect.height - 60) {
+            selected.style.top = rect.height - 60 + 'px';
+        }
+    } else {
+        let min = {x: rect.width, y:rect.height, xIdx:-1, yIdx:-1};
+        let max = {x: 0, y: 0, xIdx: -1, yIdx:-1};
+        for (let i=0; i<selectedLst.length; i++) {
+            selectedLst[i].style.cursor = 'move';
+            let nodeX = parseInt(selectedLst[i].style.left);
+            let nodeY = parseInt(selectedLst[i].style.top);
+            if (nodeX < min.x) {
+                min.x = nodeX;
+                min.xIdx = i;
+            }
+            if (nodeX > max.x) {
+                max.x = nodeX;
+                max.xIdx = i;
+            }
+            if (nodeY < min.y) {
+                min.y = nodeY;
+                min.yIdx = i;
+            };
+            if (nodeY > max.y) {
+                max.y = nodeY;
+                max.yIdx = i;
+            }
+        }
+
+        // Find the correction
+        let correction = {x: 0, y: 0};
+        if (e.clientX - offsetLst[min.xIdx].x < 8) {
+            correction.x = 8 + offsetLst[min.xIdx].x - e.clientX;
+        } else if (e.clientX - offsetLst[max.xIdx].x > rect.width - 60) {
+            correction.x = rect.width + offsetLst[max.xIdx].x - e.clientX - 60;
+        }
+        if (e.clientY - offsetLst[min.yIdx].y < 8) {
+            correction.y = 8 + offsetLst[min.yIdx].y - e.clientY;
+        } else if (e.clientY - offsetLst[max.yIdx].y > rect.height - 60) {
+            correction.y = rect.height + offsetLst[max.yIdx].y - e.clientY - 60;
+        }
+
+        // Move all the selected nodes and apply correction
+        for (let i=0; i<selectedLst.length; i++) {
+            selectedLst[i].style.left = e.clientX - offsetLst[i].x + correction.x + 'px';
+            selectedLst[i].style.top = e.clientY - offsetLst[i].y + correction.y +'px';
+        }
     }
 
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    cables.forEach((cable) => {
-        drawCable(cable);
-    })
+    refreshCanvas();
+}
+
+function handleMouseDownSelection(e) {
+    if (e.button != 0) return;
+    workspace.addEventListener('mousemove', handleMouseMoveSelection);
+}
+
+function handleMouseMoveSelection(e) {
+    if (selection == null) {
+        selection = document.createElement('div');
+        selection.classList.add('selection');
+        selection.style.pointerEvents = 'none';
+        selection.style.position = 'absolute';
+        selection.style.left = e.clientX + 'px';
+        selection.style.top = e.clientY + 'px';
+        this.appendChild(selection);
+        selectionStart = {x:e.clientX, y:e.clientY};
+    }
+    if (e.clientX < selectionStart.x) {
+        selection.style.left = e.clientX + 'px';
+        selection.style.width = selectionStart.x - e.clientX + 'px';
+    } else {
+        selection.style.width = e.clientX - selectionStart.x + 'px';
+    }
+    if (e.clientY < selectionStart.y) {
+        selection.style.top = e.clientY + 'px';
+        selection.style.height = selectionStart.y - e.clientY + 'px';
+    } else {
+        selection.style.height = e.clientY - selectionStart.y + 'px';
+    }
+}
+
+function handleMouseUpSelection(e) {
+    if (e.button != 0) return;
+    if (selection) {
+        if (selectedLst.length > 0) {
+            removeSelection();
+        }
+        if (selected) {
+            nodes.forEach((node) => {
+                if (selected != node && checkCollisiion(selection, node)) {
+                    let cable = [selected, node];
+                    if (!isDuplicate(cable)) {
+                        cables.push(cable);
+                    }
+                }
+            });
+            workspace.removeEventListener('mouseenter', handleMouseEnter);
+            workspace.removeEventListener('mousemove', handleMouseMoveA);
+            workspace.removeEventListener('mouseleave', handleMouseLeave);
+            selected = null;
+            refreshCanvas();
+        } else {
+            nodes.forEach((node) => {
+                if (checkCollisiion(selection, node)) {
+                    node.style.borderColor = 'black';
+                    selectedLst.push(node);
+                } else {
+                    node.style.borderColor = 'transparent';
+                }
+            })
+        }
+        this.removeChild(selection);
+        selection = null;
+        selectionStart = {x:NaN, y:NaN};
+    } else {
+        removeSelection();
+    }
+    workspace.removeEventListener('mousemove', handleMouseMoveSelection);
 }
 
 function handleMouseLeave(e) {
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    cables.forEach((cable) => {
-        drawCable(cable);
-    })
+    refreshCanvas();
     workspace.removeEventListener('mousemove', handleMouseMoveA);
+}
+
+function openContextMenu(e) {
+    contextMenu.innerHTML = '';
+    actions = ['Properties', 'Open Terminal', 'Disconnect', 'Delete'];
+    for (let i=0; i<actions.length; i++) {
+
+        // Properties and Open Terminal only available for a single node
+        if (['Properties', 'Open Terminal'].includes(actions[i]) && selectedLst.length > 0) continue;
+
+        // Open Terminal only available for computers
+        if (actions[i] == 'Open Terminal' && !e.target.classList.contains('computer')) continue;
+
+        // Disconnect only available for connected nodes
+        if (actions[i] == 'Disconnect') {
+            let found = false;
+            if (selectedLst.length == 0) {
+                for (let k=0; k<cables.length; k++) {
+                    if (cables[k].includes(e.target)) {
+                        found = true;
+                        break;
+                    }
+                }
+            } else {
+                for (let j=0; j<selectedLst.length; j++) {
+                    for (let k=0; k<cables.length; k++) {
+                        if (cables[k].includes(selectedLst[j])) {
+                            found = true;
+                            break;
+                        }
+                    }
+                    if (found) break;
+                }
+            }
+            if (!found) continue;
+        }
+
+        // Add the new action into the contextMenu
+        let newDiv = document.createElement('div');
+        newDiv.innerHTML = actions[i];
+        newDiv.addEventListener('click', handleMenuItem);
+        contextMenu.appendChild(newDiv);
+    }
+    contextMenu.classList.add('active');
+    selectedR = e.target;
+}
+
+function closeContextMenu() {
+    contextMenu.classList.remove('active');
+    contextMenu.classList.remove('hover-effect');
+    selectedR = null;
+    refreshCanvas();
+}
+
+function handleContextMenu(e) {
+    e.preventDefault();
+    if (selectedR && selectedR == e.target) {
+        closeContextMenu();
+        return;
+    } else {
+        workspace.removeEventListener('mouseenter', handleMouseEnter);
+        workspace.removeEventListener('mousemove', handleMouseMoveA);
+        workspace.removeEventListener('mouseleave', handleMouseLeave);
+        selected = null;
+        firstNode = true;
+        refreshCanvas();
+
+        if (contextMenu.classList.contains('active')) {
+            let oldDuration = contextMenu.style.transitionDuration;
+            contextMenu.style.transitionDuration = '0s';
+            contextMenu.classList.remove('active');
+            getComputedStyle(contextMenu).transform; // Force Layout Update
+            contextMenu.style.transitionDuration = oldDuration;
+        }
+        contextMenu.style.left = e.clientX + 'px';
+        contextMenu.style.top  = e.clientY + 'px';   
+        openContextMenu(e);
+    }
+    if (!selectedLst.includes(e.target)) {
+        removeSelection();
+    }
+}
+
+function handleMenuItem(e) {
+    if (e.target.innerText == 'Open Terminal') {
+        openInTerminal(selectedR);
+    } else if (e.target.innerText == 'Disconnect') {
+        if (selectedLst.length > 0) {
+            disconnectNode(...selectedLst);
+            removeSelection();
+        } else {
+            disconnectNode(selectedR);
+        }
+    } else if (e.target.innerText == 'Delete') {
+        if (selectedLst.length > 0) {
+            deleteNode(...selectedLst);
+            removeSelection();
+        } else {
+            deleteNode(selectedR);
+        }
+    }
+    selectedR = null;
+}
+
+async function timelyUpdate(duration) {
+    const FPS = 60;
+    let delay = 1000/FPS;
+    for (let i=0; i<duration; i+=delay) {
+        refreshCanvas();
+        await new Promise((resolve) => setTimeout(resolve, delay));
+    }
+}
+
+function disconnectNode(...nodeArr) {
+    nodeArr.forEach((node) => {
+        let copy = []
+        cables.forEach((cable) => {
+            if (!cable.includes(node)) {
+                copy.push(cable);
+            }
+        });
+        cables = copy;
+    });
+    refreshCanvas();
+}
+
+function deleteNode(...nodeArr) {
+    disconnectNode(...nodeArr);
+    nodeArr.forEach((node) => {
+        node.classList.add('deleted');
+    });
+    setTimeout(() => {
+        nodeArr.forEach((node) => {
+            workspace.removeChild(node);
+            decreaseNodeCount();
+        });
+        // Set.has(item) has O(1) time complexity, making it much faster than includes() for large arrays
+        nodes = nodes.filter(node => !new Set(nodeArr).has(node));
+    }, 200);
+}
+
+function checkCollisiion(rect1, rect2) {
+    let style1 = getComputedStyle(rect1);
+    let style2 = getComputedStyle(rect2);
+
+    let x1 = parseInt(style1.left);
+    let y1 = parseInt(style1.top);
+    let w1 = parseInt(style1.width);
+    let h1 = parseInt(style1.height);
+
+    let x2 = parseInt(style2.left);
+    let y2 = parseInt(style2.top);
+    let w2 = parseInt(style2.width);
+    let h2 = parseInt(style2.height);
+
+    return (
+        x1+w1 >= x2 &&
+        x1 <= x2+w2 &&
+        y1+h1 >= y2 &&
+        y1 <= y2+h2
+    );
+}
+
+function findType(node) {
+    if (node.classList.contains('computer')) return 'computer';
+    if (node.classList.contains('hub')) return 'hub';
+}
+
+function removeSelection() {
+    selectedLst.forEach((node) => {
+        node.style.borderColor = 'transparent';
+    });
+    selectedLst = [];
+    offsetLst = [];
 }
 
 let items = document.querySelectorAll('.item');
@@ -189,13 +544,137 @@ let items = document.querySelectorAll('.item');
     item.addEventListener('dragend', handleDragEnd);
 });
 
+function openInTerminal(computer) {
+    selectedT.node = computer;
+    selectedT.initX = computer.style.left;
+    selectedT.initY = computer.style.top;
+    let rect = workspace.getBoundingClientRect();
+    computer.src = 'assets/images/monitor.png';
+    computer.style.left = rect.width / 2 - 32 + 'px';
+    computer.style.top = rect.height / 2 - 32 + 'px';
+    computer.style.zIndex = '10';
+    computer.style.transition = 'all 500ms ease-in-out';
+    computer.classList.add('enlarge');
+    timelyUpdate(500);
+    document.getElementById('overlay').classList.add('darken');
+    setTimeout(() => {
+        if (!computer.classList.contains('enlarge')) return; // Terminal got closed
+        screenClone = computer.cloneNode();
+        screenClone.style.opacity = '0.2';
+        screenClone.style.zIndex = '20';
+        workspace.appendChild(screenClone);
+        terminal = document.createElement('div');
+        terminal.classList.add('terminal');
+        terminal.style.top = parseFloat(computer.style.top) - 107 + 'px';
+        terminal.style.left = parseFloat(computer.style.left) - 187 +'px';
+        workspace.appendChild(terminal);
+        setTimeout(() => {
+            terminal.classList.add('darken');
+        }, 50);
+        setTimeout(() => {
+            if (terminal == null) return; // Terminal got closed
+            let loadingImg = document.createElement('img');
+            loadingImg.src = "assets/images/loading.gif";
+            loadingImg.classList.add('loading');
+            terminal.appendChild(loadingImg);
+            setTimeout(() => {
+                if (terminal == null) return; // Terminal got closed
+                terminal.removeChild(loadingImg);
+                let iFrame = document.createElement('iframe');
+                iFrame.style.border = 'none';
+                iFrame.src = 'terminal.html';
+                iFrame.width = '100%';
+                iFrame.height = '100%';
+                terminal.appendChild(iFrame);
+                iFrame.focus();
+            }, 1200);
+        }, 500);
+    }, 500);
+}
+
+function closeTerminal() {
+    let computer = selectedT.node;
+    if (!computer.classList.contains('enlarge')) return; // Terminal is already closed
+    computer.style.left = selectedT.initX;
+    computer.style.top = selectedT.initY;
+    if (screenClone) workspace.removeChild(screenClone);
+    if (terminal) workspace.removeChild(terminal);
+    terminal = null;
+    computer.classList.remove('enlarge');
+    timelyUpdate(500);
+    document.getElementById('overlay').classList.remove('darken');
+    setTimeout(() => {
+        computer.style.transition = 'transform 200ms ease-in-out';
+        computer.src = 'assets/images/computer.png';
+        computer.style.zIndex = '';
+    }, 500);
+}
+
 workspace = document.getElementById('workspace')
+
 workspace.addEventListener('dragenter', handleDragEnter);
 workspace.addEventListener('dragover', handleDragOver);
 workspace.addEventListener('drop', handleDrop);
 workspace.addEventListener('dragleave', handleDragLeave);
 
+workspace.addEventListener('mousedown', handleMouseDownSelection);
+workspace.addEventListener('mouseup', handleMouseUpSelection);
+
+contextMenu = document.getElementById('context-menu');
+contextMenu.addEventListener('contextmenu', closeContextMenu);
+contextMenu.addEventListener('mousemove', (e) => {
+    contextMenu.classList.add('hover-effect');
+});
+
 canvas = document.querySelector('canvas');
 ctx = canvas.getContext('2d');
 window.addEventListener("resize", resizeCanvas);
 resizeCanvas();
+
+document.addEventListener('click', (e) => {
+    closeContextMenu();    
+});
+
+document.addEventListener('contextmenu', (e) => {
+    e.preventDefault();
+    if (!e.target.classList.contains('component')) {
+        closeContextMenu();
+    }
+}, true);
+
+document.addEventListener('keydown', (e) => {
+    if (e.key == 'a' && e.ctrlKey) {
+        e.preventDefault();
+        nodes.forEach((node) => {
+            node.style.borderColor = 'black';
+        });
+        selectedLst = nodes.slice(); // copy array
+    }
+});
+
+document.addEventListener('keyup', (e) => {
+    if (e.key == 'Escape' || e.key == 'Control' || e.key == 'Shift') {  
+        workspace.removeEventListener('mouseenter', handleMouseEnter);
+        workspace.removeEventListener('mousemove', handleMouseMoveA);
+        workspace.removeEventListener('mouseleave', handleMouseLeave);
+        if (selected) {
+            selected.style.cursor = 'pointer';
+            selected = null;
+            firstNode = true;
+            document.removeEventListener('mousemove', handleMouseMoveB);
+        }
+        refreshCanvas();
+        closeContextMenu();
+        if (e.key == 'Escape') {
+            removeSelection();
+            if (selectedT) {
+                closeTerminal();
+            }
+        }
+    } else if (e.key == 'Delete') {
+        deleteNode(...selectedLst);
+        removeSelection();
+    }
+});
+
+var fallbackMsg = document.getElementById('fallback');
