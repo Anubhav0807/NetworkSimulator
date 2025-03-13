@@ -1,3 +1,142 @@
+class Node {
+    constructor(img, name, ipAddress=null, subnetMask=null) {
+        this.img = img;
+        this.name = name;
+        this.ipAddress = ipAddress;
+        this.subnetMask = subnetMask;
+    }
+}
+
+class AdjacencyMatrix {
+    constructor() {
+        this.length = 0;
+        this.matrix = [];
+        this.weightedMatrix = [];
+    }
+
+    increaseDimension() {
+        for (let i=0; i<this.length; i++) {
+            this.matrix[i].push(0);
+            this.weightedMatrix[i].push(0);
+        }
+        this.length++;
+        this.matrix.push(new Array(this.length).fill(0))
+        this.weightedMatrix.push(new Array(this.length).fill(0));
+        this.calcWeights();
+    }
+
+    remove(...nodeArr) {
+        let copy = [];
+        let weightedCopy = [];
+        let idxArr = nodeArr.map(node => images.indexOf(node));
+        for (let i=0; i<this.length; i++) {
+            if (idxArr.includes(i)) continue;
+            let weightedRow = [];
+            let row = [];
+            for (let j=0; j<this.length; j++) {
+                if (idxArr.includes(j)) continue;
+                row.push(this.matrix[i][j]);
+                weightedRow.push(this.weightedMatrix[i][j]);
+            }
+            copy.push(row);
+            weightedCopy.push(weightedRow);
+        }
+        this.matrix = copy;
+        this.weightedMatrix = weightedCopy;
+        this.length--;
+        this.calcWeights();
+    }
+
+    calcWeights() {
+        for (let i=0; i<this.length; i++) {
+            for (let j=0; j<this.length; j++) {
+                if (this.matrix[i][j]) {
+                    this.weightedMatrix[i][j] = this.calcDist(nodes[i], nodes[j]);
+                } else {
+                    this.weightedMatrix[i][j] = -1;
+                }
+            }
+        }
+    }
+
+    calcDist(node1, node2) {
+        let x1 = parseFloat(node1.img.style.left);
+        let y1 = parseFloat(node1.img.style.top);
+        let x2 = parseFloat(node2.img.style.left);
+        let y2 = parseFloat(node2.img.style.top);
+        return Math.sqrt((x1-x2)**2 + (y1-y2)**2);
+    }
+
+    set(i, j) {
+        this.matrix[i][j] = 1;
+        this.matrix[j][i] = 1;
+    }
+
+    clear(i, j) {
+        this.matrix[i][j] = 0;
+        this.matrix[j][i] = 0;
+    }
+
+    dijkstra(src, dest) {
+        const distances = new Array(this.length).fill(Infinity);
+        const visited = new Array(this.length).fill(false);
+        const previous = new Array(this.length).fill(null);
+        
+        distances[src] = 0;
+    
+        for (let i = 0; i < this.length; i++) {
+            let minDist = Infinity;
+            let u = -1;
+    
+            // Find the unvisited node with the smallest distance
+            for (let j = 0; j < this.length; j++) {
+                if (!visited[j] && distances[j] < minDist) {
+                    minDist = distances[j];
+                    u = j;
+                }
+            }
+    
+            // If we couldn't find a valid node, break
+            if (u === -1) break;
+    
+            // Mark node as visited
+            visited[u] = true;
+    
+            // Update distances for neighbors
+            for (let v = 0; v < this.length; v++) {
+                if (this.weightedMatrix[u][v] >= 0 && !visited[v]) {
+                    let newDist = distances[u] + this.weightedMatrix[u][v];
+                    if (newDist < distances[v]) {
+                        distances[v] = newDist;
+                        previous[v] = u;
+                    }
+                }
+            }
+        }
+    
+        // If there's no path to the destination
+        if (distances[dest] === Infinity) {
+            return null;
+        }
+    
+        // Reconstruct the shortest path
+        const path = [];
+        for (let at = dest; at !== null; at = previous[at]) {
+            path.push(at);
+        }
+        path.reverse();
+    
+        return path;
+    }
+
+    display() {
+        console.log("Matrix:");
+        console.table(this.matrix);
+        console.log("Weighted Matrix:")
+        console.table(this.weightedMatrix);
+    }
+}
+
 var selected;
 var selectedR;    // Selected Node with Right Click
 var selectedT = { // Selected Node with Open Terminal
@@ -5,10 +144,13 @@ var selectedT = { // Selected Node with Open Terminal
     initX: NaN,
     initY: NaN
 };
+var selectedItem;
 
 var offsetX, offsetY;
 var nodes = [];
+var images = [];
 var cables = [];
+var adjMatrix = new AdjacencyMatrix();
 var firstNode = true;
 var nodeCount = 0;
 
@@ -19,6 +161,8 @@ var offsetLst = [];
 
 var terminal;
 var screenClone;
+var isModalOpen = false;
+var isTerminalOpen = false;
 
 function increaseNodeCount() {
     if (++nodeCount == 1) {
@@ -34,16 +178,74 @@ function decreaseNodeCount() {
     }
 }
 
+async function sendMsg(src, dest) {
+    let i = images.indexOf(src);
+    let j = images.indexOf(dest);
+    let path = adjMatrix.dijkstra(i, j);
+    if (path == null) return;
+
+    let msg = document.createElement('img');
+    msg.classList.add('msg-transfer');
+    msg.src = 'assets/images/envelope.png';
+    workspace.appendChild(msg);
+
+    for (let i in path) {
+        msg.style.top = parseFloat(images[path[i]].style.top) + 16 + 'px';
+        msg.style.left = parseFloat(images[path[i]].style.left) + 16 + 'px';
+        await new Promise(r => setTimeout(r, 1000));
+    }
+    await new Promise(r => setTimeout(r, 1000));
+    workspace.removeChild(msg);
+}
+
+function selectItem(item) {
+    if (selectedItem) {
+        selectedItem.classList.remove('selected');
+    }
+    selectedItem = item;
+    selectedItem.classList.add('selected');
+    workspace.style.cursor = 'crosshair';
+    if (selectedItem.classList.contains('msg')) {
+        nodes.forEach((node) => node.img.style.cursor = 'crosshair');
+    }
+}
+
+function deselectItem() {
+    if (selectedItem == null) return;
+    if (selectedItem.classList.contains('msg')) {
+        nodes.forEach((node) => node.img.style.cursor = 'pointer');
+    }
+    selectedItem.classList.remove('selected');
+    selectedItem = null;
+    workspace.style.cursor = '';
+}
+
+function handleClick(e) {
+    if (e.button != 0) return;
+    e.stopPropagation();
+    selectItem(e.target)
+    workspace.removeEventListener('mouseenter', handleMouseEnter);
+    workspace.removeEventListener('mousemove', handleMouseMoveA);
+    workspace.removeEventListener('mouseleave', handleMouseLeave);
+    selected = null;
+    firstNode = true;
+}
+
 function handleDragStart(e) {
     this.style.opacity = '0.4';
     selected = e.target;
     offsetX = e.offsetX;
     offsetY = e.offsetY;
     closeContextMenu();
+    deselectItem();
+    workspace.removeEventListener('mouseenter', handleMouseEnter);
+    workspace.removeEventListener('mousemove', handleMouseMoveA);
+    workspace.removeEventListener('mouseleave', handleMouseLeave);
+    firstNode = true;
 }
 
 function handleDragEnter(e) {
-    this.style.backgroundColor = '#F0FFFF';
+    this.classList.add('drag-over');
     fallbackMsg.innerText = 'Now, release the mouse to drop';
 }
 
@@ -54,13 +256,13 @@ function handleDragOver(e) {
 
 function handleDragLeave(e) {
     if (e.target.id != 'workspace') return;
-    this.style.backgroundColor = 'white';
+    this.classList.remove('drag-over');
     fallbackMsg.innerText = 'Drag the componets into the workspace to begin';
 }
 
 function handleDrop(e) {
     e.stopPropagation(); // stops the browser from redirecting
-    this.style.backgroundColor = 'white';
+    this.classList.remove('drag-over');
     fallbackMsg.innerText = 'Drag the componets into the workspace to begin';
 
     let newImg = document.createElement('img');
@@ -75,7 +277,10 @@ function handleDrop(e) {
     newImg.addEventListener('contextmenu', handleContextMenu);
     newImg.addEventListener('dragstart', e => e.preventDefault());
     this.appendChild(newImg);
-    nodes.push(newImg);
+    images.push(newImg);
+    let node = new Node(newImg, findType(selected));
+    nodes.push(node);
+    adjMatrix.increaseDimension();
     increaseNodeCount();
 
     selected = null;
@@ -99,7 +304,7 @@ function drawLine(x1, y1, x2, y2) {
     ctx.beginPath();
     ctx.moveTo(x1, y1);
     ctx.lineTo(x2, y2);
-    ctx.strokeStyle = "rgba(0, 0, 0, 0.5)";
+    ctx.strokeStyle = 'rgba(0, 0, 0, 0.5)';
     ctx.lineWidth = 2;
     ctx.stroke();
 }
@@ -108,7 +313,7 @@ function drawCable(cable) {
     ctx.beginPath();
     ctx.moveTo(parseFloat(getComputedStyle(cable[0]).left)+32, parseFloat(getComputedStyle(cable[0]).top)+32);
     ctx.lineTo(parseFloat(getComputedStyle(cable[1]).left)+32, parseFloat(getComputedStyle(cable[1]).top)+32);
-    ctx.strokeStyle = "black";
+    ctx.strokeStyle = 'black';
     ctx.lineWidth = 2;
     ctx.stroke();
 }
@@ -148,8 +353,10 @@ function handleMouseDown(e) {
             })
         });
     }
-    document.addEventListener('mousemove', handleMouseMoveB);
-    document.addEventListener('mouseup', handleMouseUpOutside);
+    if (selectedItem == null) {
+        document.addEventListener('mousemove', handleMouseMoveB);
+        document.addEventListener('mouseup', handleMouseUpOutside);
+    }
     closeContextMenu();
 }
 
@@ -164,32 +371,49 @@ function handleMouseUp(e) {
     if (selected.style.cursor == 'move') {
         selected.style.cursor = 'pointer';
         selected = null;
+        adjMatrix.calcWeights();
     } else {
         if (selectedR == null) {
             if (firstNode) {
-                workspace.addEventListener('mouseenter', handleMouseEnter);
-                workspace.addEventListener('mousemove', handleMouseMoveA);
-                workspace.addEventListener('mouseleave', handleMouseLeave);
+                if (selectedItem) {
+                    selected.classList.add('selected');
+                } else {
+                    workspace.addEventListener('mouseenter', handleMouseEnter);
+                    workspace.addEventListener('mousemove', handleMouseMoveA);
+                    workspace.addEventListener('mouseleave', handleMouseLeave);
+                }
                 firstNode = false;
             } else if (selection == null) {
-                if (selected != e.target) {
-                    let cable = [selected, e.target];
-                    if (!isDuplicate(cable)) {
-                        cables.push(cable);
-                    }
-                }
-                refreshCanvas();
-                
-                if (e.ctrlKey) {
-                    selected = e.target;
-                } else if (e.shiftKey) {
-                    // Do nothing :)
-                } else {
-                    workspace.removeEventListener('mouseenter', handleMouseEnter);
-                    workspace.removeEventListener('mousemove', handleMouseMoveA);
-                    workspace.removeEventListener('mouseleave', handleMouseLeave);
+                if (selectedItem) {
+                    sendMsg(selected, e.target);
+                    selected.classList.remove('selected');
                     selected = null;
                     firstNode = true;
+                    deselectItem();
+                } else {
+                    if (selected != e.target) {
+                        let i = images.indexOf(selected);
+                        let j = images.indexOf(e.target);
+                        adjMatrix.set(i, j);
+                        adjMatrix.calcWeights();
+                        let cable = [selected, e.target];
+                        if (!isDuplicate(cable)) {
+                            cables.push(cable);
+                        }
+                    }
+                    refreshCanvas();
+                    
+                    if (e.ctrlKey) {
+                        selected = e.target;
+                    } else if (e.shiftKey) {
+                        // Do nothing :)
+                    } else {
+                        workspace.removeEventListener('mouseenter', handleMouseEnter);
+                        workspace.removeEventListener('mousemove', handleMouseMoveA);
+                        workspace.removeEventListener('mouseleave', handleMouseLeave);
+                        selected = null;
+                        firstNode = true;
+                    }
                 }
             }
         }
@@ -280,7 +504,7 @@ function handleMouseMoveB(e) {
             correction.y = rect.height + offsetLst[max.yIdx].y - e.clientY - 60;
         }
 
-        // Move all the selected nodes and apply correction
+        // Move all the selected images and apply correction
         for (let i=0; i<selectedLst.length; i++) {
             selectedLst[i].style.left = e.clientX - offsetLst[i].x + correction.x + 'px';
             selectedLst[i].style.top = e.clientY - offsetLst[i].y + correction.y +'px';
@@ -327,8 +551,12 @@ function handleMouseUpSelection(e) {
             removeSelection();
         }
         if (selected) {
-            nodes.forEach((node) => {
+            images.forEach((node) => {
                 if (selected != node && checkCollisiion(selection, node)) {
+                    let i = images.indexOf(selected);
+                    let j = images.indexOf(node);
+                    adjMatrix.set(i, j);
+                    adjMatrix.calcWeights();
                     let cable = [selected, node];
                     if (!isDuplicate(cable)) {
                         cables.push(cable);
@@ -339,9 +567,10 @@ function handleMouseUpSelection(e) {
             workspace.removeEventListener('mousemove', handleMouseMoveA);
             workspace.removeEventListener('mouseleave', handleMouseLeave);
             selected = null;
+            firstNode = true;
             refreshCanvas();
         } else {
-            nodes.forEach((node) => {
+            images.forEach((node) => {
                 if (checkCollisiion(selection, node)) {
                     node.style.borderColor = 'black';
                     selectedLst.push(node);
@@ -375,7 +604,7 @@ function openContextMenu(e) {
         // Open Terminal only available for computers
         if (actions[i] == 'Open Terminal' && !e.target.classList.contains('computer')) continue;
 
-        // Disconnect only available for connected nodes
+        // Disconnect only available for connected images
         if (actions[i] == 'Disconnect') {
             let found = false;
             if (selectedLst.length == 0) {
@@ -412,7 +641,7 @@ function openContextMenu(e) {
 function closeContextMenu() {
     contextMenu.classList.remove('active');
     contextMenu.classList.remove('hover-effect');
-    selectedR = null;
+    if (!isModalOpen && !isTerminalOpen) selectedR = null;
     refreshCanvas();
 }
 
@@ -446,7 +675,9 @@ function handleContextMenu(e) {
 }
 
 function handleMenuItem(e) {
-    if (e.target.innerText == 'Open Terminal') {
+    if (e.target.innerText == 'Properties') {
+        openModal();
+    } else if (e.target.innerText == 'Open Terminal') {
         openInTerminal(selectedR);
     } else if (e.target.innerText == 'Disconnect') {
         if (selectedLst.length > 0) {
@@ -463,7 +694,6 @@ function handleMenuItem(e) {
             deleteNode(selectedR);
         }
     }
-    selectedR = null;
 }
 
 async function timelyUpdate(duration) {
@@ -477,6 +707,10 @@ async function timelyUpdate(duration) {
 
 function disconnectNode(...nodeArr) {
     nodeArr.forEach((node) => {
+        let i = images.indexOf(node);
+        for (let j=0; j<adjMatrix.length; j++) {
+            adjMatrix.clear(i, j);
+        }
         let copy = []
         cables.forEach((cable) => {
             if (!cable.includes(node)) {
@@ -485,6 +719,7 @@ function disconnectNode(...nodeArr) {
         });
         cables = copy;
     });
+    adjMatrix.calcWeights();
     refreshCanvas();
 }
 
@@ -498,8 +733,9 @@ function deleteNode(...nodeArr) {
             workspace.removeChild(node);
             decreaseNodeCount();
         });
-        // Set.has(item) has O(1) time complexity, making it much faster than includes() for large arrays
-        nodes = nodes.filter(node => !new Set(nodeArr).has(node));
+        adjMatrix.remove(...nodeArr)
+        images = images.filter(img => !img.classList.contains('deleted'));
+        nodes = nodes.filter(node => !node.img.classList.contains('deleted'));
     }, 200);
 }
 
@@ -528,6 +764,7 @@ function checkCollisiion(rect1, rect2) {
 function findType(node) {
     if (node.classList.contains('computer')) return 'computer';
     if (node.classList.contains('hub')) return 'hub';
+    if (node.classList.contains('msg')) return 'msg';
 }
 
 function removeSelection() {
@@ -538,13 +775,8 @@ function removeSelection() {
     offsetLst = [];
 }
 
-let items = document.querySelectorAll('.item');
-    items.forEach(function (item) {
-    item.addEventListener('dragstart', handleDragStart);
-    item.addEventListener('dragend', handleDragEnd);
-});
-
 function openInTerminal(computer) {
+    isTerminalOpen = true;
     selectedT.node = computer;
     selectedT.initX = computer.style.left;
     selectedT.initY = computer.style.top;
@@ -574,7 +806,7 @@ function openInTerminal(computer) {
         setTimeout(() => {
             if (terminal == null) return; // Terminal got closed
             let loadingImg = document.createElement('img');
-            loadingImg.src = "assets/images/loading.gif";
+            loadingImg.src = 'assets/images/loading.gif';
             loadingImg.classList.add('loading');
             terminal.appendChild(loadingImg);
             setTimeout(() => {
@@ -593,6 +825,7 @@ function openInTerminal(computer) {
 }
 
 function closeTerminal() {
+    if (!terminal) return;
     let computer = selectedT.node;
     if (!computer.classList.contains('enlarge')) return; // Terminal is already closed
     computer.style.left = selectedT.initX;
@@ -600,6 +833,11 @@ function closeTerminal() {
     if (screenClone) workspace.removeChild(screenClone);
     if (terminal) workspace.removeChild(terminal);
     terminal = null;
+    selectedT = {
+        node: null,
+        initX: NaN,
+        initY: NaN
+    };
     computer.classList.remove('enlarge');
     timelyUpdate(500);
     document.getElementById('overlay').classList.remove('darken');
@@ -608,9 +846,71 @@ function closeTerminal() {
         computer.src = 'assets/images/computer.png';
         computer.style.zIndex = '';
     }, 500);
+    isTerminalOpen = false;
 }
 
-workspace = document.getElementById('workspace')
+function openModal() {
+    modal.style.display = 'block';
+    isModalOpen = true;
+    let node = nodes[images.indexOf(selectedR)];
+    myform['component-name'].value = node.name;
+    myform['ip-address'].value = node.ipAddress;
+    myform['subnet-mask'].value = node.subnetMask;
+}
+
+function closeModal() {
+    modal.style.display = 'none';
+    selectedR = null;
+    isModalOpen = false;
+    myform.reset();
+}
+
+function isValidIPv4(ip) {
+    const ipv4Pattern = /^(25[0-5]|2[0-4][0-9]|1?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|1?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|1?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|1?[0-9][0-9]?)$/;
+    return ipv4Pattern.test(ip);
+}
+
+function getParentInfo() {
+    let idx = images.indexOf(selectedR);
+    let ipAddress = nodes[idx].ipAddress;
+    let subnetMask = nodes[idx].subnetMask;
+    if (ipAddress == null) {
+        return 'IP Address not assigned to this computer.';
+    }
+    return `IPv4 Address. . . . . . . . . : ${ipAddress}\nSubnet Mask . . . . . . . . . : ${subnetMask}`;
+}
+
+function checkConnectivity(destIP) {
+    let srcIdx = images.indexOf(selectedR);
+    let destIdx = -1;
+    for (let i=0; i<nodes.length; i++) {
+        if (nodes[i].ipAddress == destIP) {
+            destIdx = i;
+            break;
+        }
+    }
+    if (destIdx == -1) return false;
+
+    return Boolean(adjMatrix.dijkstra(srcIdx, destIdx));
+}
+
+function getSubnetMask(ip) {
+    let firstOctet = parseInt(ip.split('.')[0]);
+    if (firstOctet >= 0 && firstOctet <= 127) return '255.0.0.0';  // Class A
+    if (firstOctet >= 128 && firstOctet <= 191) return '255.255.0.0';  // Class B
+    if (firstOctet >= 192 && firstOctet <= 223) return '255.255.255.0';  // Class C
+    return '';
+}
+
+const items = document.querySelectorAll('.item');
+    items.forEach(function (item) {
+    item.addEventListener('click', handleClick);
+    item.addEventListener('dragstart', handleDragStart);
+    item.addEventListener('dragend', handleDragEnd);
+});
+
+const workspace = document.getElementById('workspace')
+const myform = document.getElementById('myform');
 
 workspace.addEventListener('dragenter', handleDragEnter);
 workspace.addEventListener('dragover', handleDragOver);
@@ -620,19 +920,19 @@ workspace.addEventListener('dragleave', handleDragLeave);
 workspace.addEventListener('mousedown', handleMouseDownSelection);
 workspace.addEventListener('mouseup', handleMouseUpSelection);
 
-contextMenu = document.getElementById('context-menu');
+const contextMenu = document.getElementById('context-menu');
 contextMenu.addEventListener('contextmenu', closeContextMenu);
 contextMenu.addEventListener('mousemove', (e) => {
     contextMenu.classList.add('hover-effect');
 });
 
-canvas = document.querySelector('canvas');
-ctx = canvas.getContext('2d');
-window.addEventListener("resize", resizeCanvas);
+const canvas = document.querySelector('canvas');
+const ctx = canvas.getContext('2d');
+window.addEventListener('resize', resizeCanvas);
 resizeCanvas();
 
 document.addEventListener('click', (e) => {
-    closeContextMenu();    
+    closeContextMenu();
 });
 
 document.addEventListener('contextmenu', (e) => {
@@ -645,10 +945,10 @@ document.addEventListener('contextmenu', (e) => {
 document.addEventListener('keydown', (e) => {
     if (e.key == 'a' && e.ctrlKey) {
         e.preventDefault();
-        nodes.forEach((node) => {
+        images.forEach((node) => {
             node.style.borderColor = 'black';
         });
-        selectedLst = nodes.slice(); // copy array
+        selectedLst = images.slice(); // copy array
     }
 });
 
@@ -667,9 +967,9 @@ document.addEventListener('keyup', (e) => {
         closeContextMenu();
         if (e.key == 'Escape') {
             removeSelection();
-            if (selectedT) {
-                closeTerminal();
-            }
+            closeTerminal();
+            closeModal();
+            deselectItem();
         }
     } else if (e.key == 'Delete') {
         deleteNode(...selectedLst);
@@ -677,4 +977,32 @@ document.addEventListener('keyup', (e) => {
     }
 });
 
-var fallbackMsg = document.getElementById('fallback');
+const fallbackMsg = document.getElementById('fallback');
+
+const modal = document.getElementById('modal');
+const componentNameInput = document.getElementById('component-name');
+const ipAddressInput = document.getElementById('ip-address');
+const subnetMaskInput = document.getElementById('subnet-mask');
+
+// Close modal when clicking 'X'
+document.getElementById('close-btn').addEventListener('click', (e) => {
+    closeModal();
+});
+
+// Save button action
+document.getElementById('save-btn').addEventListener('click', (e) => {
+    if (isValidIPv4(ipAddressInput.value)) {
+        let idx = images.indexOf(selectedR);
+        nodes[idx].name = componentNameInput.value;
+        nodes[idx].ipAddress = ipAddressInput.value;
+        nodes[idx].subnetMask = subnetMaskInput.value;
+        closeModal();
+    } else {
+        alert('Invalid IP');
+    }
+});
+
+// Update subnet mask automatically
+ipAddressInput.addEventListener('input', () => {
+    subnetMaskInput.value = getSubnetMask(ipAddressInput.value);
+});

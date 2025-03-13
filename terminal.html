@@ -26,6 +26,7 @@
             color: red;
         }
         #cursor {
+            user-select: none;
             animation: blink 0.8s infinite;
             text-shadow: 0px 0px 10px #56e3da;
         }
@@ -54,29 +55,76 @@
             cursor = document.getElementById('cursor');
         }
 
-        function execute() {
+        async function execute() {
             let output = document.createElement('pre');
+            output.classList.add('output');
             let cmdText = cmd.innerText.trim();
-            let cmdArr = cmdText.split(' ');
-            if (cmdText == 'clear') {
+            let cmdArr = cmdText.split(/\s+/);
+            let instruction = cmdArr[0];
+            if (instruction == 'clear' || instruction == 'cls') {
                 document.body.innerHTML = '';
-            } else if (cmdText == 'exit') {
+            } else if (instruction == 'help') {
+                output.innerHTML = '> ipconfig\n> ping\n> clear\n> exit';
+            } else if (instruction == 'ipconfig') {
+                output.innerHTML = parent.getParentInfo();
+            } else if (instruction.startsWith('ping')) {
+                let ipAddress = cmdArr[1];
+                if (window.parent.checkConnectivity(ipAddress)) {
+                    output.innerText = `\nPinging ${ipAddress} with 32 bytes of data:`;
+                    document.body.appendChild(output);
+                    output = '';
+                    for (let i=0; i<4; i++) {
+                        await new Promise(r => setTimeout(r, 1000));
+                        output = document.createElement('pre');
+                        output.innerText = `Reply from ${ipAddress}: bytes=32 time<1ms TTL=128`;
+                        document.body.appendChild(output);
+                    }
+                    output = document.createElement('pre');
+                    output.classList.add('output');
+                    output.innerHTML += `\nPing statistics for ${ipAddress}:`;
+                    output.innerHTML += '\n    Packets: Sent = 4, Received = 4, Lost = 0 (0% loss),';
+                    output.innerHTML += '\nApproximate round trip times in milli-seconds:';
+                    output.innerHTML += '\n    Minimum = 0ms, Maximum = 0ms, Average = 0ms';
+                } else if (window.parent.isValidIPv4(ipAddress)) {
+                    output.innerText = `\nPinging ${ipAddress} with 32 bytes of data:`;
+                    document.body.appendChild(output);
+                    output = '';
+                    for (let i=0; i<4; i++) {
+                        await new Promise(r => setTimeout(r, 5000));
+                        output = document.createElement('pre');
+                        output.innerText = `Request timed out.`;
+                        document.body.appendChild(output);
+                    }
+                    output = document.createElement('pre');
+                    output.classList.add('output');
+                    output.innerHTML += `\nPing statistics for ${ipAddress}:`;
+                    output.innerHTML += '\n    Packets: Sent = 4, Received = 0, Lost = 4 (100% loss),';
+                } else {
+                    output.innerHTML += `Ping request could not find host ${ipAddress}.`;
+                    output.innerHTML += `\nPlease check the name and try again.`;
+                }
+            } else if (instruction == 'exit') {
                 if (window.self != window.top) { // Inside an iframe
                     exit();
                 } else {
-                    output.innerHTML = `<pre class="output error">Command not found: ${cmdArr[0]}</pre>`;
+                    output.classList.add('output', 'error');
+                    output.innerHTML = `Command not found: ${cmdArr[0]}`;
                 }
-            } else if (cmdText == 'fullscreen') {
+            } else if (instruction == 'fullscreen') {
                 if (window.self != window.top) { // Inside an iframe
                     open('terminal.html', '_blank');
-                    output.innerHTML = `<pre class="output"></pre>`;
+                    output.classList.add('output');
+                    output.innerHTML = '';
                 } else {
-                    output.innerHTML = `<pre class="output error">Command not found: ${cmdArr[0]}</pre>`;
+                    output.classList.add('output', 'error');
+                    output.innerHTML = `Command not found: ${cmdArr[0]}`;
                 }
-            } else if (cmdText) {
-                output.innerHTML = `<pre class="output error">Command not found: ${cmdArr[0]}</pre>`;
+            } else if (instruction) {
+                output.classList.add('output', 'error');
+                output.innerHTML = `Command not found: ${cmdArr[0]}`;
             } else {
-                output.innerHTML = `<pre class="output"></pre>`;
+                output.classList.add('output');
+                output.innerHTML = '';
             }
             document.body.appendChild(output);
             newCmdPrompt();
@@ -91,8 +139,7 @@
             }
         }
 
-        newCmdPrompt();
-        
+        newCmdPrompt();        
 
         document.addEventListener('keydown', (e) => {
             if (e.key.length == 1) {

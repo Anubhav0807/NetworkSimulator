@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Network Simulator</title>
     <link rel="stylesheet" href="styles.css">
+    <link rel="icon" type="image/x-icon" href="assets/icons/favicon.ico">
 </head>
 <body>
     <canvas></canvas>
@@ -19,15 +20,27 @@
         <div id="inventory">
             <img class="item computer" draggable="true" src="assets/images/computer.png" alt="Computer" title="Computer">
             <img class="item hub" draggable="true" src="assets/images/hub.png" alt="Hub" title="Hub">
+            <img class="item msg" draggable="false" src="assets/images/envelope.png" alt="Message" title="Message"></img>
+            <!-- <div class="item"></div>
             <div class="item"></div>
             <div class="item"></div>
             <div class="item"></div>
-            <div class="item"></div>
-            <div class="item"></div>
-            <div class="item"></div>
+            <div class="item"></div> -->
         </div>
     </div>
     <div id="overlay"></div>
+    <div id="modal">
+        <div id="modal-content">
+            <span id="close-btn">&times;</span>
+            <h3>Properties</h3>
+            <form id="myform" autocomplete="off">
+                <input type="text" id="component-name" placeholder="Enter Component Name">
+                <input type="text" id="ip-address" placeholder="Enter IP Address">
+                <input type="text" id="subnet-mask" placeholder="Subnet Mask" readonly>
+            </form>
+            <button id="save-btn">Save</button>
+        </div>
+    </div>
     <script src="script.js"></script>
 </body>
 </html>

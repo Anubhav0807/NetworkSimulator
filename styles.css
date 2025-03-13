@@ -6,6 +6,10 @@ h1 {
     pointer-events: none;
 }
 
+body {
+    background-color: bisque;
+}
+
 canvas {
     position: absolute;
     border-radius: 10px;
@@ -15,12 +19,17 @@ canvas {
 
 #workspace {
     height: 75vh;
+    background-color: rgb(234, 234, 202);
     border: 3px dashed black;
     border-radius: 10px;
     display: flex;
     justify-content: center;
     align-items: center;
     z-index: 1;
+}
+
+#workspace.drag-over {
+    background-color: beige;
 }
 
 #context-menu {
@@ -58,7 +67,7 @@ canvas {
 }
 
 #inventory {
-    border: 1px solid black;
+    background-color: rgba(0, 0, 0, 0.12);
     border-radius: 10px;
     padding: 4px;
     display: flex;
@@ -70,7 +79,7 @@ canvas {
     cursor: pointer;
     padding: 2px;
     margin: 4px;
-    border: 2px solid white;
+    border: 2px solid transparent;
     border-radius: 10px;
     background-color: rgba(0, 0, 0, 0.12);
     user-select: none;
@@ -78,7 +87,7 @@ canvas {
 }
 
 .item:hover {
-    border-color: blue;
+    /* border-color: black; */
     transform: scale(1.05);
 }
 
@@ -91,6 +100,10 @@ canvas {
     border-radius: 10px;
     transition: transform 200ms ease-in-out;
     user-select: none;
+}
+
+.component.selected {
+    opacity: 0.5;
 }
 
 .deleted {
@@ -148,4 +161,66 @@ canvas {
 
 .selection {
     border: 2px dashed rgba(0, 0, 0, 0.5);
+}
+
+/* Properties Model */
+#modal {
+    display: none;
+    position: fixed;
+    z-index: 101;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.5);
+}
+
+#modal-content {
+    background-color: white;
+    margin: 10% auto;
+    padding: 20px;
+    border: 1px solid #888;
+    width: 300px;
+    text-align: center;
+    border-radius: 8px;
+}
+
+#close-btn {
+    color: red;
+    float: right;
+    font-size: 20px;
+    cursor: pointer;
+}
+
+input {
+    width: 90%;
+    padding: 8px;
+    margin: 5px 0;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+}
+
+#save-btn {
+    background-color: #4CAF50;
+    color: white;
+    padding: 10px;
+    border: none;
+    cursor: pointer;
+    margin-top: 10px;
+    border-radius: 4px;
+}
+
+#save-btn:hover {
+    background-color: #45a049;
+}
+
+.item.selected {
+    border-color: black;
+}
+
+.msg-transfer {
+    position: absolute;
+    width: 32px;
+    height: 32px;
+    transition: all 1s ease-in-out;
 }
