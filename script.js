@@ -1,9 +1,31 @@
 class Node {
-    constructor(img, name, ipAddress=null, subnetMask=null) {
+    constructor(img, name, limit, ipAddress=null, subnetMask=null) {
         this.img = img;
         this.name = name;
+        this.limit = limit;
+        this.connections = 0;
         this.ipAddress = ipAddress;
         this.subnetMask = subnetMask;
+
+        // Forward property access to img
+        return new Proxy(this, {
+            get(target, prop) {
+                if (prop in target) {
+                    return target[prop]; // Access Node properties
+                }
+                if (prop in target.img) {
+                    return target.img[prop]; // Access img properties
+                }
+            },
+            set(target, prop, value) {
+                if (prop in target) {
+                    target[prop] = value; // Set Node properties
+                } else if (prop in target.img) {
+                    target.img[prop] = value; // Set img properties
+                }
+                return true;
+            }
+        });
     }
 }
 
@@ -43,7 +65,7 @@ class AdjacencyMatrix {
         }
         this.matrix = copy;
         this.weightedMatrix = weightedCopy;
-        this.length--;
+        this.length = this.matrix.length;
         this.calcWeights();
     }
 
@@ -60,21 +82,25 @@ class AdjacencyMatrix {
     }
 
     calcDist(node1, node2) {
-        let x1 = parseFloat(node1.img.style.left);
-        let y1 = parseFloat(node1.img.style.top);
-        let x2 = parseFloat(node2.img.style.left);
-        let y2 = parseFloat(node2.img.style.top);
+        let x1 = parseFloat(node1.style.left);
+        let y1 = parseFloat(node1.style.top);
+        let x2 = parseFloat(node2.style.left);
+        let y2 = parseFloat(node2.style.top);
         return Math.sqrt((x1-x2)**2 + (y1-y2)**2);
     }
 
     set(i, j) {
         this.matrix[i][j] = 1;
         this.matrix[j][i] = 1;
+        nodes[i].connections++;
+        nodes[j].connections++;
     }
 
     clear(i, j) {
         this.matrix[i][j] = 0;
         this.matrix[j][i] = 0;
+        nodes[i].connections--;
+        nodes[j].connections--;
     }
 
     dijkstra(src, dest) {
@@ -184,18 +210,33 @@ async function sendMsg(src, dest) {
     let path = adjMatrix.dijkstra(i, j);
     if (path == null) return;
 
+    // Send Message
     let msg = document.createElement('img');
     msg.classList.add('msg-transfer');
     msg.src = 'assets/images/envelope.png';
     workspace.appendChild(msg);
 
-    for (let i in path) {
+    for (let i=0; i<path.length; i++) {
         msg.style.top = parseFloat(images[path[i]].style.top) + 16 + 'px';
         msg.style.left = parseFloat(images[path[i]].style.left) + 16 + 'px';
         await new Promise(r => setTimeout(r, 1000));
     }
-    await new Promise(r => setTimeout(r, 1000));
+    await new Promise(r => setTimeout(r, 500));
     workspace.removeChild(msg);
+
+    // Send Acknowledgement
+    let ack = document.createElement('img');
+    ack.classList.add('msg-transfer');
+    ack.src = 'assets/images/ack.png';
+    workspace.appendChild(ack);
+
+    for (let i=path.length-1; i>=0; i--) {
+        ack.style.top = parseFloat(images[path[i]].style.top) + 16 + 'px';
+        ack.style.left = parseFloat(images[path[i]].style.left) + 16 + 'px';
+        await new Promise(r => setTimeout(r, 1000));
+    }
+    await new Promise(r => setTimeout(r, 500));
+    workspace.removeChild(ack);
 }
 
 function selectItem(item) {
@@ -206,14 +247,14 @@ function selectItem(item) {
     selectedItem.classList.add('selected');
     workspace.style.cursor = 'crosshair';
     if (selectedItem.classList.contains('msg')) {
-        nodes.forEach((node) => node.img.style.cursor = 'crosshair');
+        nodes.forEach((node) => node.style.cursor = 'crosshair');
     }
 }
 
 function deselectItem() {
     if (selectedItem == null) return;
     if (selectedItem.classList.contains('msg')) {
-        nodes.forEach((node) => node.img.style.cursor = 'pointer');
+        nodes.forEach((node) => node.style.cursor = 'pointer');
     }
     selectedItem.classList.remove('selected');
     selectedItem = null;
@@ -267,7 +308,7 @@ function handleDrop(e) {
 
     let newImg = document.createElement('img');
     newImg.classList.add('component');
-    newImg.classList.add(findType(selected));
+    newImg.classList.add(findType(selected)['name']);
     newImg.src = selected.src;
     newImg.draggable = false;
     newImg.style.top  = e.clientY - offsetY + 'px';
@@ -278,7 +319,8 @@ function handleDrop(e) {
     newImg.addEventListener('dragstart', e => e.preventDefault());
     this.appendChild(newImg);
     images.push(newImg);
-    let node = new Node(newImg, findType(selected));
+    let nodeType = findType(selected);
+    let node = new Node(newImg, titleCase(nodeType['name']), nodeType['limit']);
     nodes.push(node);
     adjMatrix.increaseDimension();
     increaseNodeCount();
@@ -394,11 +436,13 @@ function handleMouseUp(e) {
                     if (selected != e.target) {
                         let i = images.indexOf(selected);
                         let j = images.indexOf(e.target);
-                        adjMatrix.set(i, j);
-                        adjMatrix.calcWeights();
-                        let cable = [selected, e.target];
-                        if (!isDuplicate(cable)) {
-                            cables.push(cable);
+                        if (nodes[i].connections < nodes[i].limit && nodes[j].connections < nodes[j].limit) {
+                            adjMatrix.set(i, j);
+                            adjMatrix.calcWeights();
+                            let cable = [selected, e.target];
+                            if (!isDuplicate(cable)) {
+                                cables.push(cable);
+                            }
                         }
                     }
                     refreshCanvas();
@@ -555,11 +599,13 @@ function handleMouseUpSelection(e) {
                 if (selected != node && checkCollisiion(selection, node)) {
                     let i = images.indexOf(selected);
                     let j = images.indexOf(node);
-                    adjMatrix.set(i, j);
-                    adjMatrix.calcWeights();
-                    let cable = [selected, node];
-                    if (!isDuplicate(cable)) {
-                        cables.push(cable);
+                    if (nodes[i].connections < nodes[i].limit && nodes[j].connections < nodes[j].limit) {
+                        adjMatrix.set(i, j);
+                        adjMatrix.calcWeights();
+                        let cable = [selected, node];
+                        if (!isDuplicate(cable)) {
+                            cables.push(cable);
+                        }
                     }
                 }
             });
@@ -735,7 +781,7 @@ function deleteNode(...nodeArr) {
         });
         adjMatrix.remove(...nodeArr)
         images = images.filter(img => !img.classList.contains('deleted'));
-        nodes = nodes.filter(node => !node.img.classList.contains('deleted'));
+        nodes = nodes.filter(node => !node.classList.contains('deleted'));
     }, 200);
 }
 
@@ -762,9 +808,20 @@ function checkCollisiion(rect1, rect2) {
 }
 
 function findType(node) {
-    if (node.classList.contains('computer')) return 'computer';
-    if (node.classList.contains('hub')) return 'hub';
-    if (node.classList.contains('msg')) return 'msg';
+    if (node.classList.contains('computer'))
+        return {'name': 'computer', 'limit': 1};
+    if (node.classList.contains('switch'))
+        return {'name': 'switch', 'limit': Infinity};
+    if (node.classList.contains('router'))
+        return {'name': 'router', 'limit': 2};
+    if (node.classList.contains('msg'))
+        return {'name': 'msg'};
+}
+
+function titleCase(str) {
+    return str.toLowerCase().split(' ').map(word => 
+        word.charAt(0).toUpperCase() + word.slice(1)
+    ).join(' ');
 }
 
 function removeSelection() {
