@@ -1,7 +1,8 @@
 class Node {
     constructor(img, name, limit, ipAddress=null, subnetMask=null) {
+        this.id = componentCount[name]++;
         this.img = img;
-        this.name = name;
+        this.name = name + this.id;
         this.limit = limit;
         this.connections = 0;
         this.ipAddress = ipAddress;
@@ -90,6 +91,7 @@ class AdjacencyMatrix {
     }
 
     set(i, j) {
+        if (this.matrix[i][j] == 1 || this.matrix[j][i] == 1) return;
         this.matrix[i][j] = 1;
         this.matrix[j][i] = 1;
         nodes[i].connections++;
@@ -97,6 +99,7 @@ class AdjacencyMatrix {
     }
 
     clear(i, j) {
+        if (this.matrix[i][j] == 0 || this.matrix[j][i] == 0) return;
         this.matrix[i][j] = 0;
         this.matrix[j][i] = 0;
         nodes[i].connections--;
@@ -190,6 +193,13 @@ var screenClone;
 var isModalOpen = false;
 var isTerminalOpen = false;
 
+var stausNum = 0;
+var componentCount = {
+    PC: 0,
+    Switch: 0,
+    Router: 0,
+}
+
 function increaseNodeCount() {
     if (++nodeCount == 1) {
         fallbackMsg.style.transitionDuration = '0s';
@@ -207,8 +217,14 @@ function decreaseNodeCount() {
 async function sendMsg(src, dest) {
     let i = images.indexOf(src);
     let j = images.indexOf(dest);
+    const msgData = addStatus(nodes[i].name, nodes[j].name);
     let path = adjMatrix.dijkstra(i, j);
-    if (path == null) return;
+    if (path == null) {
+        setTimeout(() => {
+            msgData.innerText = 'Failed';            
+        }, 500);
+        return;
+    }
 
     // Send Message
     let msg = document.createElement('img');
@@ -237,6 +253,44 @@ async function sendMsg(src, dest) {
     }
     await new Promise(r => setTimeout(r, 500));
     workspace.removeChild(ack);
+
+    msgData.innerText = 'Successful';
+}
+
+function addStatus(src, dest) {
+    const container = document.querySelector(".scrollable");
+    const status = document.getElementById('status');
+    const newRow = document.createElement('tr');
+    let msgData;
+    const data = [
+        `<img class="fire" src="assets/images/fire.png">`,
+        `In Progress`,
+        `${src}`,
+        `${dest}`,
+        `ICMP`,
+        `0.000`,
+        `N`,
+        `${stausNum++}`,
+        `(edit)`,
+        `(delete)`
+    ];
+    for (i of data) {
+        const newData = document.createElement('td');
+        newData.innerHTML = i;
+        newRow.appendChild(newData);
+        if (i === "In Progress") msgData = newData;
+        else if (i == "(edit)") {
+            newData.classList.add('text-btn');
+        } else if (i === "(delete)") {
+            newData.classList.add('text-btn');
+            newData.ondblclick = (e) => {
+                status.removeChild(newData.parentElement);
+            };
+        }
+    }
+    status.appendChild(newRow);
+    container.scrollTo({ top: container.scrollHeight, behavior: "smooth" });
+    return msgData;
 }
 
 function selectItem(item) {
@@ -306,9 +360,10 @@ function handleDrop(e) {
     this.classList.remove('drag-over');
     fallbackMsg.innerText = 'Drag the componets into the workspace to begin';
 
+    let nodeType = findType(selected);
     let newImg = document.createElement('img');
     newImg.classList.add('component');
-    newImg.classList.add(findType(selected)['name']);
+    newImg.classList.add(nodeType['name']);
     newImg.src = selected.src;
     newImg.draggable = false;
     newImg.style.top  = e.clientY - offsetY + 'px';
@@ -317,10 +372,10 @@ function handleDrop(e) {
     newImg.addEventListener('mouseup', handleMouseUp);
     newImg.addEventListener('contextmenu', handleContextMenu);
     newImg.addEventListener('dragstart', e => e.preventDefault());
+    let node = new Node(newImg, nodeType['name'], nodeType['limit']);
+    newImg.title = node.name;
     this.appendChild(newImg);
     images.push(newImg);
-    let nodeType = findType(selected);
-    let node = new Node(newImg, titleCase(nodeType['name']), nodeType['limit']);
     nodes.push(node);
     adjMatrix.increaseDimension();
     increaseNodeCount();
@@ -352,9 +407,13 @@ function drawLine(x1, y1, x2, y2) {
 }
 
 function drawCable(cable) {
+    const bodyMargin = parseFloat(getComputedStyle(document.body).margin);
+    const offsetX = 32 - bodyMargin;
+    const offsetY = 32 - bodyMargin + 8; // plus 8 needed for router only
+    const [style0, style1] = [getComputedStyle(cable[0]), getComputedStyle(cable[1])]
     ctx.beginPath();
-    ctx.moveTo(parseFloat(getComputedStyle(cable[0]).left)+32, parseFloat(getComputedStyle(cable[0]).top)+32);
-    ctx.lineTo(parseFloat(getComputedStyle(cable[1]).left)+32, parseFloat(getComputedStyle(cable[1]).top)+32);
+    ctx.moveTo(parseFloat(style0.left)+offsetX, parseFloat(style0.top)+offsetY);
+    ctx.lineTo(parseFloat(style1.left)+offsetX, parseFloat(style1.top)+offsetY);
     ctx.strokeStyle = 'black';
     ctx.lineWidth = 2;
     ctx.stroke();
@@ -809,19 +868,13 @@ function checkCollisiion(rect1, rect2) {
 
 function findType(node) {
     if (node.classList.contains('computer'))
-        return {'name': 'computer', 'limit': 1};
+        return {'name': 'PC', 'limit': 1};
     if (node.classList.contains('switch'))
-        return {'name': 'switch', 'limit': Infinity};
+        return {'name': 'Switch', 'limit': Infinity};
     if (node.classList.contains('router'))
-        return {'name': 'router', 'limit': 2};
+        return {'name': 'Router', 'limit': 3};
     if (node.classList.contains('msg'))
         return {'name': 'msg'};
-}
-
-function titleCase(str) {
-    return str.toLowerCase().split(' ').map(word => 
-        word.charAt(0).toUpperCase() + word.slice(1)
-    ).join(' ');
 }
 
 function removeSelection() {

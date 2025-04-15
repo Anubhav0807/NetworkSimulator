@@ -16,17 +16,31 @@
         </div>
     </div>
     <div id="context-menu"></div>
-    <div id="inventory-container">
+    <div id="container">
         <div id="inventory">
-            <img class="item computer" draggable="true" src="assets/images/computer.png" alt="Computer" title="Computer">
-            <img class="item switch" draggable="true" src="assets/images/switch.png" alt="Switch" title="Switch">
-            <img class="item router" draggable="true" src="assets/images/router.png" alt="Router" title="Router">
-            <img class="item msg" draggable="false" src="assets/images/envelope.png" alt="Message" title="Message"></img>
-            <!-- <div class="item"></div>
-            <div class="item"></div>
-            <div class="item"></div>
-            <div class="item"></div>
-            <div class="item"></div> -->
+            <img class="item computer" draggable="true" src="assets/images/computer.png" alt="Computer">
+            <img class="item switch" draggable="true" src="assets/images/switch.png" alt="Switch">
+            <img class="item router" draggable="true" src="assets/images/router.png" alt="Router">
+            <img class="item msg" draggable="false" src="assets/images/envelope.png" alt="Message">
+        </div>
+        <div class="scrollable">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Fire</th>
+                        <th>Last Status</th>
+                        <th style="width: 5vw;">Source</th>
+                        <th>Destination</th>
+                        <th style="width: 4vw;">Type</th>
+                        <th>Time(sec)</th>
+                        <th>Periodic</th>
+                        <th>Num</th>
+                        <th style="width: 4vw;">Edit</th>
+                        <th style="width: 4vw;">Delete</th>
+                    </tr>
+                </thead>
+                <tbody id="status"></tbody>
+            </table>
         </div>
     </div>
     <div id="overlay"></div>
