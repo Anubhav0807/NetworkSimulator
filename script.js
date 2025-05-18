@@ -300,6 +300,7 @@ function selectItem(item) {
     selectedItem = item;
     selectedItem.classList.add('selected');
     workspace.style.cursor = 'crosshair';
+    workspace.addEventListener('mouseup', handleAddNode);
     if (selectedItem.classList.contains('msg')) {
         nodes.forEach((node) => node.style.cursor = 'crosshair');
     }
@@ -313,6 +314,7 @@ function deselectItem() {
     selectedItem.classList.remove('selected');
     selectedItem = null;
     workspace.style.cursor = '';
+    workspace.removeEventListener('mouseup', handleAddNode);
 }
 
 function handleClick(e) {
@@ -324,6 +326,36 @@ function handleClick(e) {
     workspace.removeEventListener('mouseleave', handleMouseLeave);
     selected = null;
     firstNode = true;
+}
+
+function addNode(selectedNode) {
+    fallbackMsg.innerText = 'Drag the componets into the workspace to begin';
+    let nodeType = findType(selectedNode);
+    let newImg = document.createElement('img');
+
+    newImg.classList.add('component');
+    newImg.classList.add(nodeType['name']);
+    newImg.src = selectedNode.src;
+    newImg.draggable = false;
+    newImg.addEventListener('mousedown', handleMouseDown);
+    newImg.addEventListener('mouseup', handleMouseUp);
+    newImg.addEventListener('contextmenu', handleContextMenu);
+    newImg.addEventListener('dragstart', e => e.preventDefault());
+    let node = new Node(newImg, nodeType['name'], nodeType['limit']);
+    newImg.title = node.name;
+    workspace.appendChild(newImg);
+    images.push(newImg);
+    nodes.push(node);
+    adjMatrix.increaseDimension();
+    increaseNodeCount();
+
+    return newImg;
+}
+
+function handleAddNode(e) {
+    let newImg = addNode(selectedItem);
+    newImg.style.top  = e.clientY - 32 + 'px';
+    newImg.style.left = e.clientX - 32 + 'px';
 }
 
 function handleDragStart(e) {
@@ -340,13 +372,13 @@ function handleDragStart(e) {
 }
 
 function handleDragEnter(e) {
+    if (selected == null) return; 
     this.classList.add('drag-over');
     fallbackMsg.innerText = 'Now, release the mouse to drop';
 }
 
 function handleDragOver(e) {
-    e.preventDefault();
-    return;
+    if (selected) e.preventDefault();
 }
 
 function handleDragLeave(e) {
@@ -358,27 +390,10 @@ function handleDragLeave(e) {
 function handleDrop(e) {
     e.stopPropagation(); // stops the browser from redirecting
     this.classList.remove('drag-over');
-    fallbackMsg.innerText = 'Drag the componets into the workspace to begin';
-
-    let nodeType = findType(selected);
-    let newImg = document.createElement('img');
-    newImg.classList.add('component');
-    newImg.classList.add(nodeType['name']);
-    newImg.src = selected.src;
-    newImg.draggable = false;
+    
+    let newImg = addNode(selected);
     newImg.style.top  = e.clientY - offsetY + 'px';
     newImg.style.left = e.clientX - offsetX + 'px';
-    newImg.addEventListener('mousedown', handleMouseDown);
-    newImg.addEventListener('mouseup', handleMouseUp);
-    newImg.addEventListener('contextmenu', handleContextMenu);
-    newImg.addEventListener('dragstart', e => e.preventDefault());
-    let node = new Node(newImg, nodeType['name'], nodeType['limit']);
-    newImg.title = node.name;
-    this.appendChild(newImg);
-    images.push(newImg);
-    nodes.push(node);
-    adjMatrix.increaseDimension();
-    increaseNodeCount();
 
     selected = null;
     return false;
@@ -463,6 +478,7 @@ function handleMouseDown(e) {
 
 function handleMouseUp(e) {
     if (e.button != 0) return;
+    e.stopPropagation();
     if (selectedLst.length > 0) {
         selectedLst.forEach((node) => {
             node.style.cursor = 'pointer';
@@ -477,7 +493,14 @@ function handleMouseUp(e) {
         if (selectedR == null) {
             if (firstNode) {
                 if (selectedItem) {
-                    selected.classList.add('selected');
+                    if (findType(selectedItem)['name'] === 'msg') {
+                        selected.classList.add('selected');
+                    } else {
+                        workspace.addEventListener('mouseenter', handleMouseEnter);
+                        workspace.addEventListener('mousemove', handleMouseMoveA);
+                        workspace.addEventListener('mouseleave', handleMouseLeave);
+                        deselectItem();
+                    }
                 } else {
                     workspace.addEventListener('mouseenter', handleMouseEnter);
                     workspace.addEventListener('mousemove', handleMouseMoveA);
@@ -485,7 +508,7 @@ function handleMouseUp(e) {
                 }
                 firstNode = false;
             } else if (selection == null) {
-                if (selectedItem) {
+                if (selectedItem && findType(selectedItem)['name'] === 'msg') {
                     sendMsg(selected, e.target);
                     selected.classList.remove('selected');
                     selected = null;
@@ -707,7 +730,7 @@ function openContextMenu(e) {
         if (['Properties', 'Open Terminal'].includes(actions[i]) && selectedLst.length > 0) continue;
 
         // Open Terminal only available for computers
-        if (actions[i] == 'Open Terminal' && !e.target.classList.contains('computer')) continue;
+        if (actions[i] == 'Open Terminal' && !e.target.classList.contains('PC')) continue;
 
         // Disconnect only available for connected images
         if (actions[i] == 'Disconnect') {
